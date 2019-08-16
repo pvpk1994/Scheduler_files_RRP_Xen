@@ -1,36 +1,31 @@
 /************************************
-  Simulation File for ARINC-653 scheduler to load schedule entries (domains) in Xen
-  Author - Pavan Kumar Paluri 
-  RTLABS at University of Houston - 2019
-  *************************************/
+ Simulation File for ARINC-653 scheduler to load schedule entries (domains) in Xen
+ Author - Pavan Kumar Paluri
+ RTLABS at University of Houston - 2019
+ *************************************/
 
 /*
  Mini- Description -
-
- This file has to be placed in /home/rtlabuser as it takes info from pool_id and dom_uuid 
+ This file has to be placed in /home/rtlabuser as it takes info from pool_id and dom_uuid
  residing in /home/rtlabuser/pool_uuid folder. It imports domain(s) uuid and poolid of the cpupool
- which is run by AAF-RRP Xen scheduler. 
-
- NOTE: there is no need to run this file as the shell script /home/rtlabuser/uuid_automation.sh 
- is taking care of the compilation of this program. 
-
- - Support to multiple domains UUID extraction will soon be added...
-*/
-
+ which is run by AAF-RRP Xen scheduler.
+ NOTE: there is no need to run this file as the shell script /home/rtlabuser/uuid_automation.sh
+ is taking care of the compilation of this program.
+ - Support to multiple domains UUID extraction is now added.
+ */
 #include <stdio.h>
 #include<stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <xenctrl.h>
 #include <uuid/uuid.h>
-#define NUM_MINOR_FRAMES 1
+#define NUM_MINOR_FRAMES 2
 typedef int64_t s_time_t;
 #define MILLISECS(_ms)          (((s_time_t)(_ms)) * 1000000UL )
 #define DOMN_RUNTIME MILLISECS(10)
 #define LIBXL_CPUPOOL_POOLID_ANY 0xFFFFFFFF
 #define UUID_READ 1024
-char buffer[UUID_READ];
-char *dom_uuid;
+char **dom_uuid;
 //FILE *filer;
 int poolid(FILE *filer)
 {
@@ -44,13 +39,22 @@ int poolid(FILE *filer)
    return pool_id;
 }
 
-char *uu_id(FILE *filer)
+char **uu_id(FILE *filer)
 {
   filer = fopen("/home/rtlabuser/pool_uuid/uuid_info.txt","r");
   if(filer == NULL)
 	perror("fopen(uuid_info.txt");
-  fscanf(filer,"%s",buffer);
-  printf("Reading.. uuid of domain is: %s\n",buffer);
+  int i=0;
+  char **buffer = malloc(128*sizeof(char *));
+  int k;
+   for(k=0;k<128;k++)
+	buffer[k] = malloc(128*sizeof(char));
+  
+ while(fscanf(filer,"%s",buffer[i])==1)
+ {
+  printf("Reading.. uuid of domain is: %s\n",buffer[i]);
+  i++;
+ }
   fclose(filer);
   return buffer;
 }
@@ -62,7 +66,7 @@ int main()
    FILE *filer1;
    int pool_id;
     pool_id = poolid(filer1);
-     dom_uuid = uu_id(filer);
+    dom_uuid = uu_id(filer);
     struct xen_sysctl_scheduler_op ops;
     struct xen_sysctl_arinc653_schedule sched;
     xc_interface *xci = xc_interface_open(NULL, NULL, 0);
@@ -74,7 +78,7 @@ int main()
     for (i = 0; i < sched.num_sched_entries; ++i)
     {
         //strncpy((char *)sched.sched_entries[i].dom_handle,dom_uuid[i],sizeof(dom_uuid[i]));
-        int uuid =  uuid_parse(dom_uuid, sched.sched_entries[i].dom_handle);
+        int uuid =  uuid_parse(dom_uuid[i], sched.sched_entries[i].dom_handle);
        printf("Size of Domain: %ld\n",sizeof(sched.sched_entries[1].dom_handle));
 	printf("DomUUID return:%d\n",uuid);
 	// enabling only single vcpu to run 
@@ -88,7 +92,7 @@ int main()
     printf("The cpupoolid is: %d\n",pool_id);
     printf("The result is %d\n",result);
 //   sleep(50000000);
-//   xc_sched_arinc653_schedule_get(xci,POOL_ID,&sched);
+//    xc_sched_arinc653_schedule_get(xci,pool_id,&sched);
     printf("The number of entries is %d\n",sched.num_sched_entries);
     for(i = 0;i < sched.num_sched_entries;i++)
     {
@@ -96,7 +100,7 @@ int main()
 	printf("The major_frame is %llu\n",sched.major_frame);
 	printf("The dom_handle is %X\n",*sched.sched_entries[i].dom_handle);
 	printf("The vcpuid is %d\n",sched.sched_entries[i].vcpu_id);
-	printf("The major_frame is %llu\n",sched.sched_entries[i].runtime);
+	printf("The minor_frame runtime is %llu\n",sched.sched_entries[i].runtime);
 	printf("==============\n");
     } 
 
