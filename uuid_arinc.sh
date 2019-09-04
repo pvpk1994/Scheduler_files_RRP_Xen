@@ -19,20 +19,20 @@ else
 	NUM_RECORDS=$(cat $(pwd)/pool_uuid/list_info.txt | awk 'END{print NR}')
 	echo "total number: $NUM_RECORDS"
 	#cat list_info.txt | awk '{ for(counter = 0; counter < 3; counter++) {if ($10=="aaf_pool") {print $7}}}' >$UUID_INFO
-	cat $(pwd)/pool_uuid/list_info.txt | awk '{if($10=="aaf_pool") {print $11}}' >${POOLID_INFO}
+	cat $(pwd)/pool_uuid/list_info.txt | awk '{if($10=="arinc_pool") {print $11}}' >${POOLID_INFO}
         for i in $(seq 1 $NUM_RECORDS); do
-		 cat $(pwd)/pool_uuid/list_info.txt | awk '{if($10=="aaf_pool") {print $7}}' >$UUID_INFO
+		 cat $(pwd)/pool_uuid/list_info.txt | awk '{if($10=="arinc_pool") {print $7}}' >$UUID_INFO
 	done
 	if [ $? -eq 0 ]; then
 		echo " UUIDs of domain(s) and cpupool ID bought into simulation file"
-		gcc $(pwd)/aaf_prefinal.c -lxenctrl -lm -luuid -o aaf -L/usr/local/lib 2>/dev/null
+		gcc $(pwd)/arinc_prefinal.c -lxenctrl -lm -luuid -o arinc_prefinal -L/usr/local/lib 2>/dev/null
 		if [ $? -eq 0 ]; then
 			echo "aaf schedul entries are set successfully!!"
 			echo "----proceeding with execution---"
-			./aaf
+			./arinc_prefinal
 			if [ $? -ne 0 ]; then
 				echo "runtime error while running arinc653 simulation"
-			fi 
+			fi
 		else
 			echo "simulation file compilation failure!!!"
 		fi

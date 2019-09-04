@@ -22,15 +22,15 @@ else
     fi
     CHECKER=(file mydisk1)
     echo " mydisk1 has $CHECKER"
-    losetup /dev/loop1 ./mydisk1
+    losetup /dev/loop2 ./mydisk1
     #losetup ./mydisk1 /dev/sda1
     #losetup /dev/loop3 ./mydisk1
-    pvcreate /dev/loop1
+    pvcreate /dev/loop2
     echo "file mydisk1 now has:$(file mydisk1)"
     #2048 here is the size of the PE (physical extent), which is a basic unit of the memory
-    vgcreate -s 2048 -l 2 myvolumegroup1 /dev/loop1
+    vgcreate -s 2048 -l 2 myvolumegroup1 /dev/loop2
     lvcreate -L 4G -n mylv1 myvolumegroup1
-    lvcreate -L 4G -n mylv2 myvolumegroup1
+    #lvcreate -L 4G -n mylv2 myvolumegroup1
     #echo "$(ls /dev/myvolumegroup1)"
     mkdir -p /var/lib/xen/images/ubuntu-netboot
     cd /var/lib/xen/images/ubuntu-netboot
