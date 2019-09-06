@@ -1,0 +1,12 @@
+2019-09-04 18:07:24,085 [      0]   INFO -        #com.intellij.idea.Main - ------------------------------------------------------ IDE STARTED ------------------------------------------------------ 
+2019-09-04 18:07:24,378 [    293]   INFO -        #com.intellij.idea.Main - JNA library (64-bit) loaded in 272 ms 
+2019-09-04 18:07:25,033 [    948]   INFO -        #com.intellij.idea.Main - IDE: CLion (build #CL-192.6262.62, 21 Aug 2019 10:24) 
+2019-09-04 18:07:25,033 [    948]   INFO -        #com.intellij.idea.Main - OS: Linux (4.4.0-31-generic, amd64) 
+2019-09-04 18:07:25,033 [    948]   INFO -        #com.intellij.idea.Main - JRE: 11.0.3+12-b304.39 (JetBrains s.r.o) 
+2019-09-04 18:07:25,033 [    948]   INFO -        #com.intellij.idea.Main - JVM: 11.0.3+12-b304.39 (OpenJDK 64-Bit Server VM) 
+2019-09-04 18:07:25,033 [    948]   INFO -        #com.intellij.idea.Main - JVM Args: -Xss2m -Xms256m -Xmx2000m -XX:NewSize=128m -XX:MaxNewSize=128m -XX:ReservedCodeCacheSize=240m -XX:+UseConcMarkSweepGC -XX:SoftRefLRUPolicyMSPerMB=50 -ea -XX:CICompilerCount=2 -Dsun.io.useCanonPrefixCache=false -Djava.net.preferIPv4Stack=true -Djdk.http.auth.tunneling.disabledSchemes="" -XX:+HeapDumpOnOutOfMemoryError -XX:-OmitStackTraceInFastThrow -Djdk.attach.allowAttachSelf -Dkotlinx.coroutines.debug=off -Dawt.useSystemAAFontSettings=lcd -Dsun.java2d.renderer=sun.java2d.marlin.MarlinRenderingEngine -Dsun.tools.attach.tmp.only=true -XX:ErrorFile=/home/rtlabuser/java_error_in_CLION_%p.log -XX:HeapDumpPath=/home/rtlabuser/java_error_in_CLION.hprof -Didea.paths.selector=CLion2019.2 -Djb.vmOptionsFile=/snap/clion/82/bin/clion64.vmoptions -Didea.platform.prefix=CLion 
+2019-09-04 18:07:25,033 [    948]   INFO -        #com.intellij.idea.Main - charsets: JNU=UTF-8 file=UTF-8 
+2019-09-04 18:07:28,695 [   4610]   INFO - plication.impl.ApplicationImpl - CPU cores: 4; ForkJoinPool.commonPool: java.util.concurrent.ForkJoinPool@62e271ce[Running, parallelism = 3, size = 0, active = 0, running = 0, steals = 0, tasks = 0, submissions = 0]; factory: com.intellij.concurrency.IdeaForkJoinWorkerThreadFactory@1fdc504a 
+2019-09-04 18:07:28,798 [   4713]   INFO -        #com.intellij.idea.Main - WM detected: Compiz 
+2019-09-04 18:08:16,905 [  52820]   INFO -        #com.intellij.idea.Main - ------------------------------------------------------ IDE SHUTDOWN ------------------------------------------------------ 
+2019-09-04 18:08:16,921 [  52836]   INFO - org.jetbrains.io.BuiltInServer - web server stopped 

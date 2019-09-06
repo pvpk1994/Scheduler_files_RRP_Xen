@@ -362,7 +362,7 @@ int main()
     // Returns an unsorted timeslice-domain Pair
     // Need to sort it based on the timeslices....
     head_2 = Partition_single(scheduler, hyper_period(scheduler), head_1);
-    sched.major_frame = hyper_period(scheduler);
+    sched.major_frame = hyper_period(scheduler)*50000;
 
     head_2= MergeSort(&head_2);
     printf("\nSorted list\n");
@@ -386,8 +386,10 @@ int main()
         char buf[30];
        // itoa(head_2->id,uuid_new[k],64);
        printf("Return Val:%d\n",uuid_parse(head_2->id,sched.sched_entries[k].dom_handle));
-       sched.sched_entries[k].runtime = (head_2->ts);
+      // sched.sched_entries[k].runtime = (head_2->ts);
+       sched.sched_entries[k].runtime = 50000;
       // if(sched_aaf.schedule[k].wcet ==0)
+
       //     sched_aaf.schedule[k].wcet =1;
        sched.sched_entries[k].vcpu_id = 0;
         head_2 = head_2->next;
@@ -404,9 +406,10 @@ int main()
     }
    // sched_aaf has now all the required fields to prepare sched_entries and send them into runnable state ...
     int set_result;
-  // set_result = xc_sched_aaf_schedule_set(xci,pool_id,&sched_aaf);
+  // set_result = xc_sched_ari_schedule_set(xci,pool_id,&sched_aaf);
   // printf("Schedule Set for AAF result is: %d\n",set_result);
-    	//set_result = xc_sched_arinc653_schedule_set(xci,pool_id,&sched_aaf);
+    	set_result = xc_sched_arinc653_schedule_set(xci,pool_id,&sched);
+    printf("Schedule Set for ARINC result is: %d\n",set_result);
     return 0;
 }
 
