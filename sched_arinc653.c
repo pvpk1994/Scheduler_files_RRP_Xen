@@ -191,7 +191,11 @@ static struct vcpu *find_vcpu(
     list_for_each_entry ( avcpu, &SCHED_PRIV(ops)->vcpu_list, list )
         if ( (dom_handle_cmp(avcpu->vc->domain->handle, handle) == 0)
              && (vcpu_id == avcpu->vc->vcpu_id) )
+     {
+       printk("VCPU found for domain with Domain Handle: %X\n and that VCPU # is: %d\n",*handle, vcpu_id);
             return avcpu->vc;
+
+    }
 
     return NULL;
 }
@@ -230,6 +234,7 @@ arinc653_sched_set(
     const struct scheduler *ops,
     struct xen_sysctl_arinc653_schedule *schedule)
 {
+   printk("Entering Schedule set ARINC653....\n");
     a653sched_priv_t *sched_priv = SCHED_PRIV(ops);
     s_time_t total_runtime = 0;
     unsigned int i;
@@ -242,16 +247,23 @@ arinc653_sched_set(
     if ( (schedule->major_frame <= 0)
          || (schedule->num_sched_entries < 1)
          || (schedule->num_sched_entries > ARINC653_MAX_DOMAINS_PER_SCHEDULE) )
+     {
+       printk("Allocation Failure...\n");
         goto fail;
+     }
 
     for ( i = 0; i < schedule->num_sched_entries; i++ )
     {
         /* Check for a valid run time. */
         if ( schedule->sched_entries[i].runtime <= 0 )
-            goto fail;
+      { 
+          printk("Runtime is less than 0\n");
+          goto fail;
+      }
 
         /* Add this entry's run time to total run time. */
         total_runtime += schedule->sched_entries[i].runtime;
+        printk("Total Runtime of all schedule entries is: %d\n",total_runtime);
     }
 
     /*
@@ -259,13 +271,17 @@ arinc653_sched_set(
      * indicated by comparing the total run time to the major frame length.
      */
     if ( total_runtime > schedule->major_frame )
+    {
+      printk("Total Runtime exceeds hyperperiod\n");
         goto fail;
+     }
 
     /* Copy the new schedule into place. */
     sched_priv->num_schedule_entries = schedule->num_sched_entries;
     sched_priv->major_frame = schedule->major_frame;
     for ( i = 0; i < schedule->num_sched_entries; i++ )
     {
+        printk("Memcpy about to begin for entry: %d\n",i);
         memcpy(sched_priv->schedule[i].dom_handle,
                schedule->sched_entries[i].dom_handle,
                sizeof(sched_priv->schedule[i].dom_handle));
@@ -274,8 +290,16 @@ arinc653_sched_set(
         sched_priv->schedule[i].runtime =
             schedule->sched_entries[i].runtime;
     }
-    update_schedule_vcpus(ops);
 
+    printk(" Import Schedule_entries to global Scheduler Structure is now successful");
+
+    for(i=0;i< schedule->num_sched_entries;i++)
+    {
+      printk("Domain Handle Check for schedule entry %d : %X\n",i, *sched_priv->schedule[i].dom_handle);
+    }
+
+    update_schedule_vcpus(ops);
+    printk("Updating vcpus for every Schedule entry is now done....\n");
     /*
      * The newly-installed schedule takes effect immediately. We do not even
      * wait for the current major frame to expire.
@@ -288,6 +312,7 @@ arinc653_sched_set(
     rc = 0;
 
  fail:
+    printk("Control going to Fail Code Segment ....\n");
     spin_unlock_irqrestore(&sched_priv->lock, flags);
     return rc;
 }
@@ -397,13 +422,14 @@ a653sched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, void *dd)
         return NULL;
 
     spin_lock_irqsave(&sched_priv->lock, flags);
-
+    printk("Inside alloc_vdata Function...\n"); 
     /* 
      * Add every one of dom0's vcpus to the schedule, as long as there are
      * slots available.
      */
     if ( vc->domain->domain_id == 0 )
     {
+       printk("alloc_vdata being invoked for Dom0's VCPU #: %d\n",vc->vcpu_id);
         entry = sched_priv->num_schedule_entries;
 
         if ( entry < ARINC653_MAX_DOMAINS_PER_SCHEDULE )
@@ -429,7 +455,7 @@ a653sched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, void *dd)
     if ( !is_idle_vcpu(vc) )
         list_add(&svc->list, &SCHED_PRIV(ops)->vcpu_list);
     update_schedule_vcpus(ops);
-
+    printk("About to leave alloc_vdata function...\n");
     spin_unlock_irqrestore(&sched_priv->lock, flags);
 
     return svc;
@@ -580,19 +606,127 @@ a653sched_do_schedule(
     if ( !is_idle_vcpu(new_task)
          && (new_task->processor != cpu) )
         new_task = IDLETASK(cpu);
+/*
+    if(new_task->domain->domain_id != 0)
+    {
+      ret.time = next_switch_time - now;
+      ret.task = new_task;
+      ret.migrated =0;
+      printk("Next Entry :%X in ARINC-AAF runs for :%d\n",*sched_priv->schedule[sched_index].dom_handle,ret.time);
+      //return ret;
+   }
+*/
 
     /*
      * Return the amount of time the next domain has to run and the address
      * of the selected task's VCPU structure.
      */
+  
     ret.time = next_switch_time - now;
     ret.task = new_task;
     ret.migrated = 0;
-    printk("Time elapsed in ARINC653:%d\n",ret.time);
-    BUG_ON(ret.time <= 0);
+   printk("Next Entry :%X in ARINC-AAF runs for :%d\n",*sched_priv->schedule[sched_index].dom_handle,ret.time);
+//    printk("Time elapsed in ARINC653:%d\n",ret.time);
+ //   BUG_ON(ret.time <= 0);
 
     return ret;
 }
+
+
+
+static struct task_slice a653sched_do_schedule_new(const struct scheduler *ops, 
+		s_time_t now, bool_t tasklet_work_scheduled)
+{
+	struct task_slice ret;
+	struct vcpu* new_task = NULL;
+	static unsigned int sched_index = 0;
+	static s_time_t next_switch_time;
+	a653sched_priv_t *sched_priv = SCHED_PRIV(ops);
+	const unsigned int cpu = smp_processor_id();
+	unsigned long flags;
+
+	// Open the lock to prevent desynchronization ...
+	spin_lock_irqsave(&sched_priv->lock, flags);
+
+	// Multi condition check begins here....
+
+	// 1. Firstly check for num_entries coming from global scheduler struct
+	if(sched_priv->num_schedule_entries < 1) 
+	{
+		// Run the IDLETASK for ever until sched_set function is invoked
+		sched_priv->next_major_frame = now + DEFAULT_TIMESLICE;
+	}
+
+	// 2. If current system timer just crosses next_major_frame's time-instance...
+    else if(now >= sched_priv->next_major_frame)
+    {
+    	// new Major frame begins right here... 
+    	sched_index = 0;
+    	sched_priv->next_major_frame = now + sched_priv->major_frame;
+    	next_switch_time = now + sched_priv->schedule[0].runtime;
+    }
+
+    // 3. If for second entry upto the last entry in a given major_frame ...
+    else {
+    	// if it just crosses the next_switch time mark
+    	while(now >= next_switch_time &&
+    			sched_index < sched_priv->num_schedule_entries)
+    	{
+    		sched_index++;
+    		next_switch_time  += sched_priv->schedule[sched_index].runtime;
+    	}
+    }
+
+    // Boundary Condition Phase ...
+    // If all domains are done exectuing.. 
+    if(sched_index > sched_priv->num_schedule_entries)
+    	next_switch_time = sched_priv->next_major_frame;
+
+    // What if there are still other entries waiting for their turn...
+    new_task = (sched_index < sched_priv->num_schedule_entries) ? sched_priv->schedule[sched_index].vc : IDLETASK(cpu);
+     /* Check to see if the new task can be run (awake & runnable). */
+    if ( !((new_task != NULL)
+           && (AVCPU(new_task) != NULL)
+           && AVCPU(new_task)->awake
+           && vcpu_runnable(new_task)) )
+        new_task = IDLETASK(cpu);
+    BUG_ON(new_task == NULL);
+
+    /*
+     * Check to make sure we did not miss a major frame.
+     * This is a good test for robust partitioning.
+     */
+    BUG_ON(now >= sched_priv->next_major_frame);
+
+    spin_unlock_irqrestore(&sched_priv->lock, flags);
+
+    /* Tasklet work (which runs in idle VCPU context) overrides all else. */
+    if ( tasklet_work_scheduled )
+        new_task = IDLETASK(cpu);
+
+    /* Running this task would result in a migration */
+    if ( !is_idle_vcpu(new_task)
+         && (new_task->processor != cpu) )
+        new_task = IDLETASK(cpu);
+
+
+    /*
+     * Return the amount of time the next domain has to run and the address
+     * of the selected task's VCPU structure.
+     */
+  
+    ret.time = sched_priv->schedule[sched_index].runtime;
+    ret.task = new_task;
+    ret.migrated = 0;
+   printk("Next Entry :%X in ARINC-AAF runs for :%d\n",*sched_priv->schedule[sched_index].dom_handle,ret.time);
+//    printk("Time elapsed in ARINC653:%d\n",ret.time);
+ //   BUG_ON(ret.time <= 0);
+
+    return ret;
+
+}
+
+
 
 /**
  * Xen scheduler callback function to select a CPU for the VCPU to run on
@@ -704,7 +838,7 @@ a653sched_adjust_global(const struct scheduler *ops,
  * The symbol must be visible to the rest of Xen at link time.
  */
 const struct scheduler sched_arinc653_def = {
-    .name           = "ARINC 653 Scheduler",
+    .name           = "Arinc653 Scheduler",
     .opt_name       = "arinc653",
     .sched_id       = XEN_SCHEDULER_ARINC653,
     .sched_data     = NULL,
@@ -723,7 +857,7 @@ const struct scheduler sched_arinc653_def = {
     .yield          = NULL,
     .context_saved  = NULL,
 
-    .do_schedule    = a653sched_do_schedule,
+    .do_schedule    = a653sched_do_schedule_new,
 
     .pick_cpu       = a653sched_pick_cpu,
 
