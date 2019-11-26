@@ -1,5 +1,5 @@
 /* Partition Single (ps) Algorithm Xen Implementation
- * Pavan Kumar Paluri
+ * Author:: Pavan Kumar Paluri
  * Copyright 2019 - RTLAB UNIVERSITY OF HOUSTON */
 
 #include <xen/config.h>
@@ -35,7 +35,7 @@ struct ps_vcpu_t
 {
   struct vcpu* vc;
   // bool variable to see if vcpu is awake or asleep
-  bool_t awake;
+   // bool_t awake;
   // Linked list of vcpus to be maintained in global scheduler structure
   struct list_head list_elem;
 };
@@ -280,9 +280,11 @@ static void* aafsched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, 
 	if(avc == NULL)
 	    return NULL;
 	spin_lock_irqsave(&sched_priv->lock, flags);
+        printk("Inside alloc_vdata Function...\n");
 	// Now add every vcpu of Dom0 to the schedule,as long as there are enough slots
 	if(vc->domain->domain_id == 0)
 	{
+           printk("alloc_vdata being invoked for Dom0's VCPU #: %d\n",vc->vcpu_id);
 	  entry = sched_priv->num_schedule_entries;
 	  if(entry < PS_MAX_DOMAINS_PER_SCHEDULE)
 	  {
@@ -301,11 +303,12 @@ static void* aafsched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, 
         // VCPU will be in asleep state if not specifically woken up and this will give an error if no vcpu in dom0 is brought
         // to awake state.
 	avc->vc = vc;
-        avc->awake = 0;
+        // avc->awake = 0;
 	if(!is_idle_vcpu(vc))
 	   list_add(&avc->list_elem, &SCHED_PRIV(ops)->vcpu_list);
 	// After adding the vcpu to the list, update the vcpus
 	update_schedule_vcpus(ops);
+       printk("About to leave alloc_vdata function...\n");
         spin_unlock_irqrestore(&sched_priv->lock, flags);
        return avc;
 }
@@ -325,8 +328,7 @@ static void aaf_free_vdata(const struct scheduler *ops, void *priv)
 // AAF callback functions for sleeping and awaking scheduler's vcpus
 static void aaf_vcpu_sleep(const struct scheduler *ops, struct vcpu *vc)
 {
- if(PSVCPU(vc) != NULL)
-   PSVCPU(vc)->awake =0;
+
   /* If by any chance, the VCPU being put to sleep is the same as one that is currently running,
    * raise a SOft interrupt request to let scheduler know to switch domains */
   if(per_cpu(schedule_data, vc->processor).curr == vc)
@@ -336,9 +338,6 @@ static void aaf_vcpu_sleep(const struct scheduler *ops, struct vcpu *vc)
 // Waking up the scheduler
 static void aaf_vcpu_wake(const struct scheduler *ops, struct vcpu *vc)
 {
- if(PSVCPU(vc) != NULL)
-   PSVCPU(vc)->awake =1;
- 
   cpu_raise_softirq(vc->processor, SCHEDULE_SOFTIRQ);
 }
 
@@ -449,10 +448,10 @@ static struct task_slice ps_rrp_do_schedule(const struct scheduler *ops,
 	sched_private->next_hyperperiod = now + MILLISECS(30);
   else if (now >= sched_private->next_hyperperiod)
   {
+    sched_index = 0;
 	// this means we need to immediately set the new hp to be the length of hp
    sched_private->next_hyperperiod = now + sched_private->hyperperiod;
   // set the counter of number of schedule entries back to 0 if its not
-   sched_index = 0;
    next_switch_time = now+sched_private->schedule[0].wcet;
   }
   // focus on scheduling domains within the hyperperiod now
@@ -462,13 +461,13 @@ static struct task_slice ps_rrp_do_schedule(const struct scheduler *ops,
 	{
 	sched_index++;
         // update the next_switch time
-       next_switch_time = now + sched_private->schedule[sched_index].wcet;
+       next_switch_time += sched_private->schedule[sched_index].wcet;
        }
    }
   
   /* Boundary conditions checking phase */
   // If all the domains are exhausted, then set next_switch_time to be @ next major frame
-  if(sched_index > sched_private->num_schedule_entries)
+  if(sched_index >= sched_private->num_schedule_entries)
   {
 	next_switch_time = sched_private->next_hyperperiod;
   }
@@ -477,7 +476,8 @@ static struct task_slice ps_rrp_do_schedule(const struct scheduler *ops,
   * OR if we have exhausted all schedule entries within that hyperperiod, run idle timeslices until beginning
   * of next hyperperiod 
   */
-  new_task = (sched_index < sched_private->num_schedule_entries)?sched_private->schedule[sched_index].vc
+  new_task = (sched_index < sched_private->num_schedule_entries)
+				?sched_private->schedule[sched_index].vc
 				: IDLETASK(cpu);
 
   /** ERROR CHECK ON NEW_TASK **/
@@ -498,19 +498,39 @@ static struct task_slice ps_rrp_do_schedule(const struct scheduler *ops,
    if(tasklet_work_scheduled)
 	new_task = IDLETASK(cpu);
  
+   if(!is_idle_vcpu(new_task)
+	&& (new_task->processor != cpu))
+	new_task = IDLETASK(cpu);
+
+
   // This scheduler does not allow migration to some other PCPU yet since it is only a single core
   // therefore, new_task->processor should always be equal to smp_processor_id() ie cpu
 
   /* Now all the checks are done and its time to return the amount of time next_schedule_entry(domain) has to run
    * along with the  upcoming task's VCPU structure. */
+
+  // Only for Domain-0 and idleVCPU
+  if(sched_private->schedule[sched_index].dom_handle != "\0"
+	&& new_task->domain->domain_id!= 32767)
+   {
+	ret.time = sched_private->schedule[sched_index].wcet;
+	ret.task = new_task;
+        ret.migrated = 0;
+        printk("Time to be taken for new task to run for with PS_SCHEDULER is:%d\n",ret.time);
+        return ret;
+   }
+
+  else
+  {
+  // Only for Schedule entries (Dom0 and idle vcpu excluded)
   ret.time = next_switch_time - now;
   ret.task = new_task;
   // No migration
   ret.migrated = 0;
-  printk("Time to be taken for new task to run for with PS_SCHEDULER is:%d\n",ret.time);
   // FATAL error if time is an invalid number
  // BUG_ON(ret.time<=0);
   return ret;
+  }
 }
 
 // adjust_global
