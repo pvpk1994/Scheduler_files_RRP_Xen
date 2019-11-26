@@ -164,17 +164,9 @@ static int ps_sched_set(const struct scheduler *ops, struct xen_sysctl_aaf_sched
             printk("WCET is less than 0!!\n");
 		goto dump;
         }
-	else
-	 wcet_total += (schedule->schedule[i].wcet)-(schedule->schedule[i-1].wcet);
-    }
-   printk("Total WCET:%d\n",wcet_total);
-   
-  // If hyperperiod is not large enough to run all domains, NOT REALTIME-> PANIC
-  if(wcet_total > schedule->hyperperiod)
-   {
-      printk("Total WCET exceeds hyperperiod");
-	goto dump;
-    }
+	
+}
+
 
    // After all error-checking is done, now its time to copy schedule to new place
     sched_priv->num_schedule_entries = schedule->num_schedule_entries;
