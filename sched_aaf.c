@@ -14,6 +14,7 @@
 #include <xen/guest_access.h>
 #include <public/sysctl.h>
 
+#define RRP_TRACING 
 // Have a default time slice for Domain0's vcpus to run
 #define DOM0_TS MILLISECS(10)
 // get the idle vcpu for a given cpu - to run idle time slices in case no domain runs 
@@ -26,6 +27,8 @@
 // Given scheduler ops pointer, return ps scheduler's  private struct 
 #define SCHED_PRIV(s)   ((struct ps_priv_t *)((s)->sched_data))
 
+// Timer function to print time
+#define print_time() ( printk("CPU_ID: %d, ms::micro_s:: %3ld.%3ld, %-19s ",smp_processor_id(), NOW()/MILLISECS(1),NOW()%MILLISECS(1)/1000, __func__) )
 /********************
 * Scheduler Customization Structures
 *********************/
@@ -123,10 +126,30 @@ static void update_schedule_vcpus(const struct scheduler *ops)
      // Update the schedule entries with valid vcpus that are recognized and valid by Xen
 	SCHED_PRIV(ops)->schedule[i].vc =
 		find_vcpu(ops,SCHED_PRIV(ops)->schedule[i].dom_handle,
-			SCHED_PRIV(ops)->schedule[i].vcpu_id);
-  
+			SCHED_PRIV(ops)->schedule[i].vcpu_id);  
    }
 }
+
+
+// VCPU Related Info tracing
+static void aaf_vcpu_tracing(struct vcpu *avc)
+{
+   printk("[Domain ID: %5d. VCPU ID: %-2d], CPU: %d, Runnable ?: %d\n",avc->domain->domain_id, avc->vcpu_id,
+             vcpu_runnable(avc));
+}
+
+// Schedule Entry tracing 
+static void aaf_sched_entr_tracing(const struct scheduler* ops, int counter_entr)
+{
+ // Typecast ops into local sched_private
+ struct ps_priv_t *priv = SCHED_PRIV(ops);
+ print_time();
+ printk("Schedule Entry Info: \n");
+
+ printk("\t Schedule Entry: %X\n", priv->schedule[counter_entr].dom_handle);
+ }
+
+
 
 
 // Set Boundary Conditions
@@ -164,7 +187,6 @@ static int ps_sched_set(const struct scheduler *ops, struct xen_sysctl_aaf_sched
             printk("WCET is less than 0!!\n");
 		goto dump;
         }
-	
 }
 
 
@@ -442,7 +464,35 @@ static struct task_slice ps_rrp_do_schedule(const struct scheduler *ops,
   struct ps_priv_t *sched_private = SCHED_PRIV(ops);
   const unsigned int cpu = smp_processor_id();
   unsigned long flags;
+/*
+  #ifdef RRP_TRACING
+   if(!is_idle_vcpu(sched_private->schedule[sched_index].vc) &&
+		(sched_private->schedule[sched_index].vc->domain->domain_id != 0)
+    {
+      // Context switch tracing begins for a particular schedule entry
+	printk("CS begins\n");
+        print_time();
+       aaf_sched_entr_tracing(ops, sched_index); 
+    }
+  #endif
+*/
+
   // This scheduler is not lock protected right now, make sure to include it in the final stages.... 
+  // Need to introduce context switch here, since sched_index value is computed in the
+  // else condition above. 
+
+     #ifdef RRP_TRACING
+     if(sched_private->schedule[sched_index].dom_handle != "\0"
+        && IDLETASK(cpu)->domain->domain_id!= 32767)
+    {
+      // Context switch tracing begins for a particular schedule entry
+        printk("CS begins\n");
+         print_time();
+       aaf_vcpu_tracing(sched_private->schedule[sched_index].vc);
+    }
+
+   #endif
+  
   spin_lock_irqsave(&sched_private->lock, flags); 
  if(sched_private->num_schedule_entries < 1)
 	sched_private->next_hyperperiod = now + MILLISECS(30);
@@ -454,6 +504,9 @@ static struct task_slice ps_rrp_do_schedule(const struct scheduler *ops,
   // set the counter of number of schedule entries back to 0 if its not
    next_switch_time = now+sched_private->schedule[0].wcet;
   }
+ 
+
+
   // focus on scheduling domains within the hyperperiod now
   else {
       while(now >= next_switch_time &&
@@ -464,7 +517,20 @@ static struct task_slice ps_rrp_do_schedule(const struct scheduler *ops,
        next_switch_time += sched_private->schedule[sched_index].wcet;
        }
    }
-  
+  // Need to introduce context switch here, since sched_index value is computed in the
+  // else condition above. 
+
+/*
+     if(sched_private->schedule[sched_index].dom_handle != "\0"
+        && IDLETASK(cpu)->domain->domain_id!= 32767)
+    {
+      // Context switch tracing begins for a particular schedule entry
+        printk("CS begins\n");
+         print_time();
+       aaf_vcpu_tracing(sched_private->schedule[sched_index].vc);
+    }
+
+ */
   /* Boundary conditions checking phase */
   // If all the domains are exhausted, then set next_switch_time to be @ next major frame
   if(sched_index >= sched_private->num_schedule_entries)
@@ -514,7 +580,13 @@ static struct task_slice ps_rrp_do_schedule(const struct scheduler *ops,
 	&& new_task->domain->domain_id!= 32767)
    {
 	ret.time = sched_private->schedule[sched_index].wcet;
-	ret.task = new_task;
+	ret.task = new_task; 
+       // Measuring Context Switches only for valid schedule entries
+        #ifdef RRP_TRACING
+	printk("CS Done! \n");
+	 print_time();
+        aaf_vcpu_tracing(new_task);
+	#endif
         ret.migrated = 0;
         printk("Time to be taken for new task to run for with PS_SCHEDULER is:%d\n",ret.time);
         return ret;
