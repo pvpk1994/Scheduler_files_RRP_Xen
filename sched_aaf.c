@@ -9,12 +9,12 @@
 #include <xen/timer.h>
 #include <xen/softirq.h>
 #include <xen/time.h>
+#include <xen/trace.h>
 #include <xen/errno.h>
 #include <xen/list.h>
 #include <xen/guest_access.h>
 #include <public/sysctl.h>
 
-#define RRP_TRACING 
 // Have a default time slice for Domain0's vcpus to run
 #define DOM0_TS MILLISECS(10)
 // get the idle vcpu for a given cpu - to run idle time slices in case no domain runs 
@@ -29,6 +29,14 @@
 
 // Timer function to print time
 #define print_time() ( printk("CPU_ID: %d, ms::micro_s:: %3ld.%3ld, %-19s ",smp_processor_id(), NOW()/MILLISECS(1),NOW()%MILLISECS(1)/1000, __func__) )
+
+/*
+ * AAF Tracing events (only 512 value ranges available)
+ * More details regarding the events can be found at
+ * /include/public/trace.h 
+ */
+#define TRC_AAF_SCHEDULE TRC_SCHED_CLASS_EVT(AAF, 1)
+
 /********************
 * Scheduler Customization Structures
 *********************/
@@ -135,7 +143,7 @@ static void update_schedule_vcpus(const struct scheduler *ops)
 static void aaf_vcpu_tracing(struct vcpu *avc)
 {
    printk("[Domain ID: %5d. VCPU ID: %-2d], CPU: %d, Runnable ?: %d\n",avc->domain->domain_id, avc->vcpu_id,
-             vcpu_runnable(avc));
+             smp_processor_id(),vcpu_runnable(avc));
 }
 
 // Schedule Entry tracing 
@@ -464,35 +472,28 @@ static struct task_slice ps_rrp_do_schedule(const struct scheduler *ops,
   struct ps_priv_t *sched_private = SCHED_PRIV(ops);
   const unsigned int cpu = smp_processor_id();
   unsigned long flags;
-/*
-  #ifdef RRP_TRACING
-   if(!is_idle_vcpu(sched_private->schedule[sched_index].vc) &&
-		(sched_private->schedule[sched_index].vc->domain->domain_id != 0)
-    {
-      // Context switch tracing begins for a particular schedule entry
-	printk("CS begins\n");
-        print_time();
-       aaf_sched_entr_tracing(ops, sched_index); 
-    }
-  #endif
-*/
-
-  // This scheduler is not lock protected right now, make sure to include it in the final stages.... 
-  // Need to introduce context switch here, since sched_index value is computed in the
-  // else condition above. 
-
-     #ifdef RRP_TRACING
-     if(sched_private->schedule[sched_index].dom_handle != "\0"
-        && IDLETASK(cpu)->domain->domain_id!= 32767)
-    {
-      // Context switch tracing begins for a particular schedule entry
-        printk("CS begins\n");
-         print_time();
-       aaf_vcpu_tracing(sched_private->schedule[sched_index].vc);
-    }
-
-   #endif
+  /* TRACE */
+  /*
+  Trial-1:  Do an indefinite while(0) to see if it works 
+  */
+if( unlikely(tb_init_done))
+{
+  struct
+ {
+   unsigned cpu:16, tasklet:8, idle:8;
+ } d;
+  d.cpu = smp_processor_id();
+  d.tasklet = tasklet_work_scheduled;
+  d.idle = is_idle_vcpu(current);
+  // Doing a trace 1d will only yeild tracing once.
+  //TRACE_1D(TRC_AAF_SCHEDULE, (const void*) &d);
+ __trace_var(TRC_AAF_SCHEDULE, 1, sizeof(d), (unsigned char *)&d);
+}
+ /* SCHED EVENT TRACING ENDS
+  * -------------------- */
   
+
+
   spin_lock_irqsave(&sched_private->lock, flags); 
  if(sched_private->num_schedule_entries < 1)
 	sched_private->next_hyperperiod = now + MILLISECS(30);
@@ -576,19 +577,24 @@ static struct task_slice ps_rrp_do_schedule(const struct scheduler *ops,
    * along with the  upcoming task's VCPU structure. */
 
   // Only for Domain-0 and idleVCPU
-  if(sched_private->schedule[sched_index].dom_handle != "\0"
+
+ // Possible Solution: since new_task is being assigned to ret.task, implement a boundary check 
+ // on new_task rather than schedule[sched_index]
+  
+ /*
+if(sched_private->schedule[sched_index].dom_handle != "\0"
 	&& new_task->domain->domain_id!= 32767)
+  */
+   if(new_task->domain->domain_id != 0 && new_task->domain->domain_id !=32767)
    {
-	ret.time = sched_private->schedule[sched_index].wcet;
+	ret.time = next_switch_time - now;
 	ret.task = new_task; 
        // Measuring Context Switches only for valid schedule entries
-        #ifdef RRP_TRACING
-	printk("CS Done! \n");
-	 print_time();
-        aaf_vcpu_tracing(new_task);
-	#endif
+	// printk("CS Done! \n");
+	 // print_time();
+        //aaf_vcpu_tracing(new_task);
         ret.migrated = 0;
-        printk("Time to be taken for new task to run for with PS_SCHEDULER is:%d\n",ret.time);
+        // printk("Time to be taken for new task to run for with PS_SCHEDULER is:%d\n",ret.time);
         return ret;
    }
 
